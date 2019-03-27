@@ -34,12 +34,12 @@ def load_nlp_pipeline():
     if nlp_pipeline is None:
         logging.info('Loading NLP pipeline')
         try:
-            import en_core_web_sm
+            import de_core_news_sm
         except FileNotFoundError:
-            logging.error('Unable to load spacy model en_core_web_sm. '
+            logging.error('Unable to load spacy model de_core_news_sm. '
                           'Make sure to download it with: '
-                          'python -m spacy download en')
-        nlp_pipeline = en_core_web_sm.load(disable=['parser', 'tagger', 'ner'])
+                          'python -m spacy download de')
+        nlp_pipeline = de_core_news_sm.load(disable=['parser', 'tagger', 'ner'])
     return nlp_pipeline
 
 
