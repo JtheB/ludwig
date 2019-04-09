@@ -103,6 +103,114 @@ class ConcatCombiner:
         return hidden, hidden_size
 
 
+class MidFusionCombiner:
+    def __init__(
+            self,
+            fc_layers=None,
+            num_fc_layers=None,
+            fc_size=128,
+            norm=None,
+            activation='relu',
+            dropout=False,
+            initializer=None,
+            regularize=True,
+            **kwargs
+    ):
+        self.fc_stack = None
+
+        if fc_layers is None and \
+                num_fc_layers is not None:
+            fc_layers = []
+            for i in range(num_fc_layers):
+                fc_layers.append({'fc_size': fc_size})
+
+        if fc_layers is not None:
+            self.fc_stack = FCStack(
+                layers=fc_layers,
+                num_layers=num_fc_layers,
+                default_fc_size=fc_size,
+                default_norm=norm,
+                default_activation=activation,
+                default_dropout=dropout,
+                default_initializer=initializer,
+                default_regularize=regularize
+            )
+
+    def __call__(
+            self,
+            feature_encodings,
+            regularizer,
+            dropout_rate,
+            is_training=True,
+            **kwargs
+    ):
+
+        scope_name = 'midfusion_combiner'
+        with tf.variable_scope(scope_name):
+            representations = []
+            representations_size = 0
+            print(feature_encodings)
+            for fe_name, fe_properties in reversed(feature_encodings.items()):
+                with tf.variable_scope('modality_' + fe_name):
+                    print(fe_name)
+                    print('***')
+                    print(fe_properties)
+                    fc_size = 128
+                    modality = fe_properties['representation']
+                    modality_size = fe_properties['size']
+                    print("modality_size")
+                    print(modality_size)
+
+                    modality_fc_layers = []
+                    modality_fc_layers.append({'modality_fc_size_' + fe_name: fc_size})
+                    modality_fc_stack = FCStack(layers=modality_fc_layers, default_fc_size=fc_size,
+                                                default_activation='relu')
+                    modality_after_fc = modality_fc_stack(modality, modality_size)
+                    representations.append(modality_after_fc)
+                    representations_size += fc_size
+
+            print("representations_size")
+            print(representations_size)
+            concat_combiner = ConcatCombiner(num_fc_layers=1, fc_size=128)
+            fused_modalities, fused_modalities_size = concat_combiner(feature_encodings, regularizer, dropout_rate)
+
+            representations.append(fused_modalities)
+            representations_size += fused_modalities_size
+
+            print("representations_size")
+            print(representations_size)
+
+            # ================ Concat ================
+            with tf.variable_scope('final_concatenation'):
+
+                hidden = tf.concat(representations, 1)
+                hidden_size = representations_size
+
+                logging.debug('  concat_hidden: {0}'.format(hidden))
+
+            # ================ Fully Connected ================
+            with tf.variable_scope('final_fc'):
+                if self.fc_stack is not None:
+                    print("hidden__size")
+                    print(hidden_size)
+
+                    hidden = self.fc_stack(
+                        hidden,
+                        hidden_size,
+                        regularizer=regularizer,
+                        dropout_rate=dropout_rate,
+                        is_training=is_training
+                    )
+                    print('final fc completed')
+                    hidden_size = self.fc_stack.layers[-1]['fc_size']
+                    # hidden_size = 384
+                    logging.debug('  final_hidden: {0}'.format(hidden))
+
+                hidden = tf.identity(hidden, name=scope_name)
+
+        return hidden, hidden_size
+
+
 class SequenceConcatCombiner:
     def __init__(
             self,
@@ -166,7 +274,6 @@ class SequenceConcatCombiner:
                         # features have different lengths for some data points.
                         if fe_properties['representation'].shape[1] != \
                                 representation.shape[1]:
-
                             raise ValueError(
                                 'The sequence length of the input feature {} '
                                 'is {} and is different from the sequence '
