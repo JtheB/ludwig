@@ -421,6 +421,7 @@ def get_build_combiner(combiner_type):
 
 combiner_registry = {
     'concat': ConcatCombiner,
+    'midfusion': MidFusionCombiner,
     'sequence_concat': SequenceConcatCombiner,
     'sequence': SequenceCombiner
 }
